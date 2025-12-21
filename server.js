@@ -130,17 +130,16 @@ async function scrapeEbay(page, query) {
 async function scrapeJiji(page, query) {
     console.log(chalk.blue(`Searching Jiji.ng for: ${query}...`));
     try {
-        // Jiji often needs resources to load properly, so we skip configurePage (blocking) for it
-        // Or we could make a less aggressive blocker, but for now let's try full load
-        // await configurePage(page); 
+        // IMPORTANT: Set User Agent for Jiji to avoid bot detection
+        await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
         await page.goto(`https://jiji.ng/search?query=${encodeURIComponent(query)}`, {
-            waitUntil: 'networkidle2', // Wait a bit longer for detailed items
+            waitUntil: 'networkidle2', // Wait for detailed items
             timeout: 60000
         });
 
         // Wait for results
-        await page.waitForSelector('.qa-advert-list-item', { timeout: 15000 }).catch(() => null);
+        await page.waitForSelector('.qa-advert-list-item, .b-list-advert-base', { timeout: 15000 }).catch(() => null);
 
         // Perform some scrolling for lazy loading
         await page.evaluate(() => {
@@ -150,14 +149,14 @@ async function scrapeJiji(page, query) {
 
         const results = await page.evaluate(() => {
             const items = [];
-            document.querySelectorAll('.qa-advert-list-item').forEach(el => {
+            // Target both common Jiji selectors
+            document.querySelectorAll('.qa-advert-list-item, .b-list-advert-base').forEach(el => {
                 const titleEl = el.querySelector('.qa-advert-title') || el.querySelector('.b-advert-title-inner');
                 const title = titleEl?.innerText || 'N/A';
                 const price = el.querySelector('.qa-advert-price')?.innerText || 'N/A';
                 const img = el.querySelector('img')?.src || 'N/A';
-                const link = el.href;
+                const link = el.href || (el.tagName === 'A' ? el.href : el.querySelector('a')?.href) || 'N/A';
 
-                // Jiji usually doesn't have ratings in search
                 const rating = 'N/A';
 
                 if (title !== 'N/A' && price !== 'N/A' && !title.includes('Shop on')) {
