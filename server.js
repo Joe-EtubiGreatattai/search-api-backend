@@ -51,8 +51,11 @@ async function scrapeAmazon(page, query) {
                 const img = el.querySelector('.s-image')?.src || 'N/A';
                 const link = el.querySelector('a.a-link-normal')?.href || 'N/A';
 
+                // Extract rating
+                const rating = el.querySelector('.a-icon-alt')?.innerText || 'N/A';
+
                 if (title !== 'N/A' && price !== 'N/A') {
-                    items.push({ source: 'Amazon', title, price, img, link });
+                    items.push({ source: 'Amazon', title, price, img, link, rating });
                 }
             });
             return items;
@@ -105,8 +108,14 @@ async function scrapeEbay(page, query) {
                 const img = imgEl?.getAttribute('src') || imgEl?.src || 'N/A';
                 const link = linkEl?.href || 'N/A';
 
+                // Extract rating for eBay
+                // eBay ratings can be tricky, often in .x-star-rating .visually-hidden
+                const ratingEl = el.querySelector('.x-star-rating .visually-hidden') ||
+                    el.querySelector('.b-rating__rating-star span');
+                const rating = ratingEl?.innerText || 'N/A';
+
                 if (title !== 'N/A' && price !== 'N/A' && !title.includes('Shop on eBay') && title.length > 10) {
-                    items.push({ source: 'eBay', title, price, img, link });
+                    items.push({ source: 'eBay', title, price, img, link, rating });
                 }
             });
             return items;
@@ -148,8 +157,11 @@ async function scrapeJiji(page, query) {
                 const img = el.querySelector('img')?.src || 'N/A';
                 const link = el.href;
 
+                // Jiji usually doesn't have ratings in search
+                const rating = 'N/A';
+
                 if (title !== 'N/A' && price !== 'N/A' && !title.includes('Shop on')) {
-                    items.push({ source: 'Jiji', title, price, img, link });
+                    items.push({ source: 'Jiji', title, price, img, link, rating });
                 }
             });
             return items.slice(0, 15);
@@ -194,8 +206,12 @@ async function scrapeJumia(page, query) {
                 const img = el.querySelector('img.img')?.dataset.src || el.querySelector('img.img')?.src || 'N/A';
                 const link = el.querySelector('a.core')?.href || 'N/A';
 
+                // Extract rating for Jumia
+                // Jumia uses .stars._s text content like "4.5 out of 5"
+                const rating = el.querySelector('.stars._s')?.innerText || 'N/A';
+
                 if (title !== 'N/A' && price !== 'N/A') {
-                    items.push({ source: 'Jumia', title, price, img, link });
+                    items.push({ source: 'Jumia', title, price, img, link, rating });
                 }
             });
             return items.slice(0, 15);
