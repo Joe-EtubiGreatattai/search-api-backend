@@ -12,9 +12,24 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+// Helper to optimize page (block resources + set UA)
+async function configurePage(page) {
+    await page.setRequestInterception(true);
+    page.on('request', (req) => {
+        if (['image', 'stylesheet', 'font', 'media'].includes(req.resourceType())) {
+            req.abort();
+        } else {
+            req.continue();
+        }
+    });
+    // Standard UA for most sites
+    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+}
+
 async function scrapeAmazon(page, query) {
     console.log(chalk.blue(`Searching Amazon for: ${query}...`));
     try {
+        await configurePage(page);
         await page.goto(`https://www.amazon.com/s?k=${encodeURIComponent(query)}`, {
             waitUntil: 'domcontentloaded',
             timeout: 60000
@@ -52,6 +67,7 @@ async function scrapeAmazon(page, query) {
 async function scrapeEbay(page, query) {
     console.log(chalk.blue(`Searching eBay for: ${query}...`));
     try {
+        await configurePage(page);
         await page.goto(`https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(query)}`, {
             waitUntil: 'domcontentloaded',
             timeout: 60000
@@ -105,6 +121,7 @@ async function scrapeEbay(page, query) {
 async function scrapeJiji(page, query) {
     console.log(chalk.blue(`Searching Jiji.ng for: ${query}...`));
     try {
+        await configurePage(page);
         await page.goto(`https://jiji.ng/search?query=${encodeURIComponent(query)}`, {
             waitUntil: 'domcontentloaded',
             timeout: 60000
@@ -144,7 +161,9 @@ async function scrapeJiji(page, query) {
 async function scrapeJumia(page, query) {
     console.log(chalk.blue(`Searching Jumia for: ${query}...`));
     try {
-        // Use a very specific, modern UA for Jumia
+        // Apply resource blocking first
+        await configurePage(page);
+        // Then override UA for Jumia specifically
         const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36';
         await page.setUserAgent(UA);
         await page.setViewport({ width: 1366, height: 768 });
@@ -202,14 +221,6 @@ app.get('/api/search', async (req, res) => {
             browser.newPage(),
             browser.newPage(),
             browser.newPage()
-        ]);
-
-        const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-        await Promise.all([
-            amazonPage.setUserAgent(UA),
-            ebayPage.setUserAgent(UA),
-            jijiPage.setUserAgent(UA)
-            // Jumia sets its own UA in the function
         ]);
 
         // Run scrapers sequentially to save memory on free tier
