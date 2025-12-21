@@ -231,8 +231,20 @@ app.get('/api/search', async (req, res) => {
         // const jumiaResults = await scrapeJumia(jumiaPage, q);
 
         const allResults = [...amazonResults, ...ebayResults, ...jijiResults]; // Add ...jumiaResults back when enabled
+
+        const responseData = {
+            total: allResults.length,
+            counts: {
+                Amazon: amazonResults.length,
+                eBay: ebayResults.length,
+                Jiji: jijiResults.length,
+                Jumia: 0 // Currently disabled
+            },
+            results: allResults
+        };
+
         console.log(chalk.green(`Search completed. Found ${allResults.length} total results.`));
-        res.json(allResults);
+        res.json(responseData);
 
     } catch (error) {
         console.error(chalk.red('API search failed:'), error.message);
