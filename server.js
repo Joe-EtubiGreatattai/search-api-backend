@@ -230,25 +230,51 @@ app.get('/api/search', async (req, res) => {
 
     const browser = await puppeteer.launch({
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--window-size=1280,800']
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--no-zygote',
+            '--window-size=1280,800'
+        ],
+        timeout: 60000 // Longer timeout for Render
     });
 
     try {
-        const [amazonPage, ebayPage, jijiPage, jumiaPage] = await Promise.all([
-            browser.newPage(),
-            browser.newPage(),
-            browser.newPage(),
-            browser.newPage()
-        ]);
+        let amazonResults = [];
+        let ebayResults = [];
+        let jijiResults = [];
 
-        // Run scrapers sequentially to save memory on free tier
-        const amazonResults = await scrapeAmazon(amazonPage, q);
-        const ebayResults = await scrapeEbay(ebayPage, q);
-        const jijiResults = await scrapeJiji(jijiPage, q);
-        // Jumia disabled for performance - uncomment to re-enable
-        // const jumiaResults = await scrapeJumia(jumiaPage, q);
+        // Amazon
+        try {
+            const page = await browser.newPage();
+            amazonResults = await scrapeAmazon(page, q);
+            await page.close();
+        } catch (e) {
+            console.error(chalk.red('Amazon process error:'), e.message);
+        }
 
-        const allResults = [...amazonResults, ...ebayResults, ...jijiResults]; // Add ...jumiaResults back when enabled
+        // eBay
+        try {
+            const page = await browser.newPage();
+            ebayResults = await scrapeEbay(page, q);
+            await page.close();
+        } catch (e) {
+            console.error(chalk.red('eBay process error:'), e.message);
+        }
+
+        // Jiji
+        try {
+            const page = await browser.newPage();
+            jijiResults = await scrapeJiji(page, q);
+            await page.close();
+            console.log(chalk.gray(`Jiji search returned ${jijiResults.length} results.`));
+        } catch (e) {
+            console.error(chalk.red('Jiji process error:'), e.message);
+        }
+
+        const allResults = [...amazonResults, ...ebayResults, ...jijiResults];
 
         const responseData = {
             total: allResults.length,
@@ -256,7 +282,7 @@ app.get('/api/search', async (req, res) => {
                 Amazon: amazonResults.length,
                 eBay: ebayResults.length,
                 Jiji: jijiResults.length,
-                Jumia: 0 // Currently disabled
+                Jumia: 0
             },
             results: allResults
         };
