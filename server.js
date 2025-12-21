@@ -121,9 +121,12 @@ async function scrapeEbay(page, query) {
 async function scrapeJiji(page, query) {
     console.log(chalk.blue(`Searching Jiji.ng for: ${query}...`));
     try {
-        await configurePage(page);
+        // Jiji often needs resources to load properly, so we skip configurePage (blocking) for it
+        // Or we could make a less aggressive blocker, but for now let's try full load
+        // await configurePage(page); 
+
         await page.goto(`https://jiji.ng/search?query=${encodeURIComponent(query)}`, {
-            waitUntil: 'domcontentloaded',
+            waitUntil: 'networkidle2', // Wait a bit longer for detailed items
             timeout: 60000
         });
 
