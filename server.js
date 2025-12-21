@@ -212,12 +212,11 @@ app.get('/api/search', async (req, res) => {
             // Jumia sets its own UA in the function
         ]);
 
-        const [amazonResults, ebayResults, jijiResults, jumiaResults] = await Promise.all([
-            scrapeAmazon(amazonPage, q),
-            scrapeEbay(ebayPage, q),
-            scrapeJiji(jijiPage, q),
-            scrapeJumia(jumiaPage, q)
-        ]);
+        // Run scrapers sequentially to save memory on free tier
+        const amazonResults = await scrapeAmazon(amazonPage, q);
+        const ebayResults = await scrapeEbay(ebayPage, q);
+        const jijiResults = await scrapeJiji(jijiPage, q);
+        const jumiaResults = await scrapeJumia(jumiaPage, q);
 
         const allResults = [...amazonResults, ...ebayResults, ...jijiResults, ...jumiaResults];
         console.log(chalk.green(`Search completed. Found ${allResults.length} total results.`));
