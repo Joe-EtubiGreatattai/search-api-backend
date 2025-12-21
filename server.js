@@ -134,12 +134,20 @@ async function scrapeJiji(page, query) {
         await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
         await page.goto(`https://jiji.ng/search?query=${encodeURIComponent(query)}`, {
-            waitUntil: 'networkidle2', // Wait for detailed items
+            waitUntil: 'domcontentloaded', // Faster initial load
             timeout: 60000
         });
 
-        // Wait for results
-        await page.waitForSelector('.qa-advert-list-item, .b-list-advert-base', { timeout: 15000 }).catch(() => null);
+        // Debug logging for Render
+        const pageTitle = await page.title();
+        console.log(`[Jiji Debug] Page Title: ${pageTitle}`);
+
+        // Wait for results with fallback
+        console.log('[Jiji Debug] Waiting for selectors...');
+        await page.waitForSelector('.qa-advert-list-item, .b-list-advert-base', { timeout: 20000 }).catch(async () => {
+            const bodyText = await page.evaluate(() => document.body.innerText.substring(0, 300));
+            console.log(`[Jiji Debug] Selector timeout. Body start: ${bodyText.replace(/\n/g, ' ')}`);
+        });
 
         // Perform some scrolling for lazy loading
         await page.evaluate(() => {
