@@ -230,6 +230,17 @@ async function scrapeJumia(page, query) {
     }
 }
 
+app.get('/', (req, res) => {
+    res.json({
+        message: 'Welcome to the Custom Scraper API! 🚀',
+        status: 'running',
+        endpoints: {
+            search: '/api/search?q=query'
+        }
+    });
+});
+
+
 app.get('/api/search', async (req, res) => {
     const { q } = req.query;
     if (!q) return res.status(400).json({ error: 'Query parameter "q" is required' });
