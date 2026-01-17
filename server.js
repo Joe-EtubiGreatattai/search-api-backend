@@ -23,7 +23,7 @@ async function configurePage(page) {
         }
     });
     // Standard UA for most sites
-    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
 }
 
 async function scrapeAmazon(page, query) {
@@ -131,7 +131,7 @@ async function scrapeJiji(page, query) {
     console.log(chalk.blue(`Searching Jiji.ng for: ${query}...`));
     try {
         // IMPORTANT: Set User Agent for Jiji to avoid bot detection
-        await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
 
         await page.goto(`https://jiji.ng/search?query=${encodeURIComponent(query)}`, {
             waitUntil: 'domcontentloaded', // Faster initial load
@@ -186,7 +186,7 @@ async function scrapeJumia(page, query) {
         // Apply resource blocking first
         await configurePage(page);
         // Then override UA for Jumia specifically
-        const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36';
+        const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
         await page.setUserAgent(UA);
         await page.setViewport({ width: 1366, height: 768 });
 
@@ -537,91 +537,45 @@ app.get('/api/search', async (req, res) => {
         let ajeboResults = [];
         let dexStitchesResults = [];
 
-        const tasks = [];
+        // Helper for sequential execution to prevent Resource Exhaustion on Render
+        const runScraper = async (name, scrapeFn) => {
+            let page;
+            try {
+                page = await browser.newPage();
+                const res = await scrapeFn(page, q);
+                await page.close();
+                return res;
+            } catch (e) {
+                console.error(`${name} task error:`, e.message);
+                if (page) await page.close().catch(() => { });
+                return [];
+            }
+        };
+
+        console.log(chalk.yellow('Starting sequential scrape (to avoid timeouts)...'));
 
         // Nigerian Stores based on Category
         if (category === 'gadget') {
-            tasks.push((async () => {
-                try {
-                    const page = await browser.newPage();
-                    slotResults = await scrapeSlot(page, q);
-                    await page.close();
-                } catch (e) { console.error('Slot task error:', e.message); }
-            })());
-            tasks.push((async () => {
-                try {
-                    const page = await browser.newPage();
-                    kongaResults = await scrapeKonga(page, q);
-                    await page.close();
-                } catch (e) { console.error('Konga task error:', e.message); }
-            })());
-            tasks.push((async () => {
-                try {
-                    const page = await browser.newPage();
-                    jijiResults = await scrapeJiji(page, q);
-                    await page.close();
-                } catch (e) { console.error('Jiji task error:', e.message); }
-            })());
+            slotResults = await runScraper('Slot', scrapeSlot);
+            kongaResults = await runScraper('Konga', scrapeKonga);
+            jijiResults = await runScraper('Jiji', scrapeJiji);
         } else if (category === 'fashion') {
             // Fashion is Konga and Ajebo Market
-            tasks.push((async () => {
-                try {
-                    const page = await browser.newPage();
-                    kongaResults = await scrapeKonga(page, q);
-                    await page.close();
-                } catch (e) { console.error('Konga task error:', e.message); }
-            })());
-            tasks.push((async () => {
-                try {
-                    const page = await browser.newPage();
-                    ajeboResults = await scrapeAjeboMarket(page, q);
-                    await page.close();
-                } catch (e) { console.error('Ajebo Market task error:', e.message); }
-            })());
-            tasks.push((async () => {
-                try {
-                    const page = await browser.newPage();
-                    dexStitchesResults = await scrapeDexStitches(page, q);
-                    await page.close();
-                } catch (e) { console.error('DexStitches task error:', e.message); }
-            })());
+            kongaResults = await runScraper('Konga', scrapeKonga);
+            ajeboResults = await runScraper('Ajebo market', scrapeAjeboMarket);
+            dexStitchesResults = await runScraper('DexStitches', scrapeDexStitches);
         } else {
             // Default: Search Konga and Jiji only (Slot is gadget-exclusive)
-            tasks.push((async () => {
-                try {
-                    const page = await browser.newPage();
-                    kongaResults = await scrapeKonga(page, q);
-                    await page.close();
-                } catch (e) { console.error('Konga task error:', e.message); }
-            })());
-            tasks.push((async () => {
-                try {
-                    const page = await browser.newPage();
-                    jijiResults = await scrapeJiji(page, q);
-                    await page.close();
-                } catch (e) { console.error('Jiji task error:', e.message); }
-            })());
+            kongaResults = await runScraper('Konga', scrapeKonga);
+            jijiResults = await runScraper('Jiji', scrapeJiji);
         }
 
         // Backups (Amazon & eBay) - Always searched
-        tasks.push((async () => {
-            try {
-                const page = await browser.newPage();
-                amazonResults = await scrapeAmazon(page, q);
-                await page.close();
-            } catch (e) { console.error('Amazon task error:', e.message); }
-        })());
-        /* eBay Temporarily Disabled
-        tasks.push((async () => {
-            try {
-                const page = await browser.newPage();
-                ebayResults = await scrapeEbay(page, q);
-                await page.close();
-            } catch (e) { console.error('eBay task error:', e.message); }
-        })());
-        */
+        amazonResults = await runScraper('Amazon', scrapeAmazon);
 
-        await Promise.all(tasks);
+        /* eBay Temporarily Disabled
+        ebayResults = await runScraper('eBay', scrapeEbay);
+        */
 
         const allResults = interleaveResults([slotResults, kongaResults, jijiResults, jumiaResults, ajeboResults, dexStitchesResults, amazonResults]); // Removed ebayResults
 
