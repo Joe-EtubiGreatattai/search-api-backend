@@ -564,10 +564,11 @@ app.get('/api/search', async (req, res) => {
             // Adding Jumia as a backup for gadgets if needed, though it was skipped in sequential
             tasks.push(runScraper('Jumia', scrapeJumia).then(res => jumiaResults = res));
         } else if (category === 'fashion') {
-            // Fashion is Konga, Ajebo Market and DexStitches
+            // Fashion is Konga, Ajebo Market, DexStitches and Jumia
             tasks.push(runScraper('Konga', scrapeKonga).then(res => kongaResults = res));
             tasks.push(runScraper('Ajebo market', scrapeAjeboMarket).then(res => ajeboResults = res));
             tasks.push(runScraper('DexStitches', scrapeDexStitches).then(res => dexStitchesResults = res));
+            tasks.push(runScraper('Jumia', scrapeJumia).then(res => jumiaResults = res));
         } else {
             // Default: Search Konga, Jiji and Jumia
             tasks.push(runScraper('Konga', scrapeKonga).then(res => kongaResults = res));
