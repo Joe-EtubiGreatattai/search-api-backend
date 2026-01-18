@@ -239,58 +239,67 @@ async function scrapeKonga(page, query) {
             timeout: 60000
         });
 
-        // Give Konga extra time to load results and scroll progressively to trigger lazy loading
-        for (let i = 0; i < 3; i++) {
-            await page.evaluate(() => window.scrollBy(0, 800));
-            await new Promise(resolve => setTimeout(resolve, 1000));
+        // Give Konga more time to load and scroll progressively to trigger all lazy loading
+        for (let i = 0; i < 5; i++) {
+            await page.evaluate(() => window.scrollBy(0, 1000));
+            await new Promise(resolve => setTimeout(resolve, 800));
         }
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 4000));
 
-        await page.waitForSelector('.List_listItem__KlvU2', { timeout: 20000 }).catch(() => {
+        await page.waitForSelector('.List_listItem__KlvU2, article[class*="ListingCard"]', { timeout: 20000 }).catch(() => {
             console.log(chalk.yellow('⚠️  Konga: Timeout waiting for results'));
         });
 
         const results = await page.evaluate(() => {
             const items = [];
-            // Use specific article container found during inspection
-            document.querySelectorAll('article[class*="ListingCard_listingCardContainer"]').forEach(el => {
-                const titleEl = el.querySelector('h3[class*="ListingCard_productTitle"]');
+            const isRealImg = (url) => url && !url.startsWith('data:image') && (url.includes('cloudinary') || url.includes('konga.com') || url.length > 30);
+
+            // Target the listing items
+            document.querySelectorAll('article[class*="ListingCard_listingCardContainer"], .List_listItem__KlvU2').forEach(el => {
+                const titleEl = el.querySelector('h3[class*="ListingCard_productTitle"], .ListingCard_productTitle__9Kzxv');
                 const title = titleEl?.innerText.trim() || 'N/A';
 
                 const linkEl = el.querySelector('a[href^="/product/"]');
                 const link = linkEl ? `https://www.konga.com${linkEl.getAttribute('href')}` : 'N/A';
 
-                // Price is in a specific boxed container
                 const priceEl = el.querySelector('span[class*="price"], .shared_price__gnso_');
                 const price = priceEl?.innerText.replace(/₦|,/g, '').trim() || 'N/A';
 
-                // Konga uses Next.js lazy loading with data:image placeholders
-                const images = Array.from(el.querySelectorAll('img'));
                 let img = 'N/A';
 
-                // Find the best image source
-                for (const imgTag of images) {
+                // 1. Check all images in the container for a real source
+                const imgTags = Array.from(el.querySelectorAll('img'));
+                for (const imgTag of imgTags) {
                     const src = imgTag.getAttribute('src');
                     const srcset = imgTag.getAttribute('srcset');
                     const dataSrc = imgTag.getAttribute('data-src');
 
-                    // If we have a real Cloudinary URL in any attribute, use it
-                    const isReal = (url) => url && !url.startsWith('data:image') && url.length > 50;
-
-                    if (isReal(dataSrc)) {
+                    if (isRealImg(dataSrc)) {
                         img = dataSrc;
                         break;
                     }
                     if (srcset) {
-                        const firstSrc = srcset.split(',')[0].trim().split(' ')[0];
-                        if (isReal(firstSrc)) {
-                            img = firstSrc;
+                        const sources = srcset.split(',').map(s => s.trim().split(' ')[0]);
+                        const bestSrc = sources.find(isRealImg);
+                        if (bestSrc) {
+                            img = bestSrc;
                             break;
                         }
                     }
-                    if (isReal(src)) {
+                    if (isRealImg(src)) {
                         img = src;
                         break;
+                    }
+                }
+
+                // 2. Fallback: Noscript tag (Common in Next.js)
+                if (img === 'N/A' || img.startsWith('data:image')) {
+                    const noscript = el.querySelector('noscript');
+                    if (noscript) {
+                        const match = noscript.innerHTML.match(/src="([^"]+)"/);
+                        if (match && isRealImg(match[1])) {
+                            img = match[1];
+                        }
                     }
                 }
 
