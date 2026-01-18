@@ -576,7 +576,8 @@ app.get('/api/search', async (req, res) => {
             tasks.push(runScraper('Jumia', scrapeJumia).then(res => jumiaResults = res));
         }
 
-        // Backups (Amazon) - Always searched
+        // Common sources - Always searched
+        tasks.push(runScraper('Jumia', scrapeJumia).then(res => jumiaResults = res));
         tasks.push(runScraper('Amazon', scrapeAmazon).then(res => amazonResults = res));
 
         // Wait for all to complete in parallel
