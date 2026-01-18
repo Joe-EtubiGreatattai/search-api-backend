@@ -239,9 +239,12 @@ async function scrapeKonga(page, query) {
             timeout: 60000
         });
 
-        // Give Konga extra time to load results and scroll slightly to trigger lazy loading
-        await page.evaluate(() => window.scrollBy(0, 1000));
-        await new Promise(resolve => setTimeout(resolve, 4000));
+        // Give Konga extra time to load results and scroll progressively to trigger lazy loading
+        for (let i = 0; i < 3; i++) {
+            await page.evaluate(() => window.scrollBy(0, 800));
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
         await page.waitForSelector('.List_listItem__KlvU2', { timeout: 20000 }).catch(() => {
             console.log(chalk.yellow('⚠️  Konga: Timeout waiting for results'));
@@ -249,47 +252,46 @@ async function scrapeKonga(page, query) {
 
         const results = await page.evaluate(() => {
             const items = [];
-            document.querySelectorAll('.List_listItem__KlvU2').forEach(el => {
-                const titleEl = el.querySelector('.ListingCard_productTitle__9Kzxv');
+            // Use specific article container found during inspection
+            document.querySelectorAll('article[class*="ListingCard_listingCardContainer"]').forEach(el => {
+                const titleEl = el.querySelector('h3[class*="ListingCard_productTitle"]');
                 const title = titleEl?.innerText.trim() || 'N/A';
 
                 const linkEl = el.querySelector('a[href^="/product/"]');
                 const link = linkEl ? `https://www.konga.com${linkEl.getAttribute('href')}` : 'N/A';
 
-                const priceEl = el.querySelector('.shared_price__gnso_');
+                // Price is in a specific boxed container
+                const priceEl = el.querySelector('span[class*="price"], .shared_price__gnso_');
                 const price = priceEl?.innerText.replace(/₦|,/g, '').trim() || 'N/A';
 
-                // Konga uses complex lazy loading (Next.js)
-                const imgEl = el.querySelector('img[alt]');
-
-                // 1. Try to find a non-placeholder image in the container
-                const allImages = Array.from(el.querySelectorAll('img'));
-                const realImg = allImages.find(i => i.src && !i.src.startsWith('data:image') && i.src.length > 50) ||
-                    allImages.find(i => i.getAttribute('data-src') || i.getAttribute('srcset'));
-
+                // Konga uses Next.js lazy loading with data:image placeholders
+                const images = Array.from(el.querySelectorAll('img'));
                 let img = 'N/A';
-                if (realImg) {
-                    img = realImg.getAttribute('data-src') ||
-                        realImg.getAttribute('srcset')?.split(',')[0].trim().split(' ')[0] ||
-                        realImg.src;
-                } else if (imgEl) {
-                    img = imgEl.getAttribute('data-src') ||
-                        imgEl.getAttribute('srcset')?.split(',')[0].trim().split(' ')[0] ||
-                        imgEl.src;
-                }
 
-                // 2. Fallback: Parse Next.js image URL or noscript
-                if (img === 'N/A' || img.startsWith('data:image')) {
-                    const noscript = el.querySelector('noscript');
-                    if (noscript) {
-                        const match = noscript.innerHTML.match(/src="([^"]+)"/);
-                        if (match) img = match[1];
+                // Find the best image source
+                for (const imgTag of images) {
+                    const src = imgTag.getAttribute('src');
+                    const srcset = imgTag.getAttribute('srcset');
+                    const dataSrc = imgTag.getAttribute('data-src');
+
+                    // If we have a real Cloudinary URL in any attribute, use it
+                    const isReal = (url) => url && !url.startsWith('data:image') && url.length > 50;
+
+                    if (isReal(dataSrc)) {
+                        img = dataSrc;
+                        break;
                     }
-                }
-
-                if (img === 'N/A' || img.startsWith('data:image')) {
-                    const imgMatch = el.innerHTML.match(/https:\/\/[^\s\"\'\>]+?\.(jpg|png|webp|jpeg)/i);
-                    if (imgMatch) img = imgMatch[0];
+                    if (srcset) {
+                        const firstSrc = srcset.split(',')[0].trim().split(' ')[0];
+                        if (isReal(firstSrc)) {
+                            img = firstSrc;
+                            break;
+                        }
+                    }
+                    if (isReal(src)) {
+                        img = src;
+                        break;
+                    }
                 }
 
                 if (title !== 'N/A' && price !== 'N/A' && !title.includes('Shop on')) {
