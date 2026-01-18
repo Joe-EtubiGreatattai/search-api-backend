@@ -552,30 +552,34 @@ app.get('/api/search', async (req, res) => {
             }
         };
 
-        console.log(chalk.yellow('Starting sequential scrape (to avoid timeouts)...'));
+        console.log(chalk.yellow('Starting concurrent scrape (to improve performance)...'));
+
+        const tasks = [];
 
         // Nigerian Stores based on Category
         if (category === 'gadget') {
-            slotResults = await runScraper('Slot', scrapeSlot);
-            kongaResults = await runScraper('Konga', scrapeKonga);
-            jijiResults = await runScraper('Jiji', scrapeJiji);
+            tasks.push(runScraper('Slot', scrapeSlot).then(res => slotResults = res));
+            tasks.push(runScraper('Konga', scrapeKonga).then(res => kongaResults = res));
+            tasks.push(runScraper('Jiji', scrapeJiji).then(res => jijiResults = res));
+            // Adding Jumia as a backup for gadgets if needed, though it was skipped in sequential
+            tasks.push(runScraper('Jumia', scrapeJumia).then(res => jumiaResults = res));
         } else if (category === 'fashion') {
-            // Fashion is Konga and Ajebo Market
-            kongaResults = await runScraper('Konga', scrapeKonga);
-            ajeboResults = await runScraper('Ajebo market', scrapeAjeboMarket);
-            dexStitchesResults = await runScraper('DexStitches', scrapeDexStitches);
+            // Fashion is Konga, Ajebo Market and DexStitches
+            tasks.push(runScraper('Konga', scrapeKonga).then(res => kongaResults = res));
+            tasks.push(runScraper('Ajebo market', scrapeAjeboMarket).then(res => ajeboResults = res));
+            tasks.push(runScraper('DexStitches', scrapeDexStitches).then(res => dexStitchesResults = res));
         } else {
-            // Default: Search Konga and Jiji only (Slot is gadget-exclusive)
-            kongaResults = await runScraper('Konga', scrapeKonga);
-            jijiResults = await runScraper('Jiji', scrapeJiji);
+            // Default: Search Konga, Jiji and Jumia
+            tasks.push(runScraper('Konga', scrapeKonga).then(res => kongaResults = res));
+            tasks.push(runScraper('Jiji', scrapeJiji).then(res => jijiResults = res));
+            tasks.push(runScraper('Jumia', scrapeJumia).then(res => jumiaResults = res));
         }
 
-        // Backups (Amazon & eBay) - Always searched
-        amazonResults = await runScraper('Amazon', scrapeAmazon);
+        // Backups (Amazon) - Always searched
+        tasks.push(runScraper('Amazon', scrapeAmazon).then(res => amazonResults = res));
 
-        /* eBay Temporarily Disabled
-        ebayResults = await runScraper('eBay', scrapeEbay);
-        */
+        // Wait for all to complete in parallel
+        await Promise.allSettled(tasks);
 
         const allResults = interleaveResults([slotResults, kongaResults, jijiResults, jumiaResults, ajeboResults, dexStitchesResults, amazonResults]); // Removed ebayResults
 
