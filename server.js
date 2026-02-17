@@ -9,6 +9,35 @@ puppeteer.use(StealthPlugin());
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+let browser;
+
+async function getBrowser() {
+    if (browser && browser.connected) {
+        return browser;
+    }
+
+    console.log(chalk.yellow('🚀 Launching new shared browser instance...'));
+    browser = await puppeteer.launch({
+        headless: true,
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--no-zygote',
+            '--window-size=1280,800'
+        ],
+        timeout: 60000
+    });
+
+    browser.on('disconnected', () => {
+        console.log(chalk.red('⚠️ Browser disconnected. Will reconnect on next request.'));
+        browser = null;
+    });
+
+    return browser;
+}
+
 app.use(cors());
 app.use(express.json());
 
@@ -524,21 +553,8 @@ app.get('/api/search', async (req, res) => {
 
     console.log(chalk.green(`\nNew web search request: ${q}`));
 
-    let browser;
-
     try {
-        browser = await puppeteer.launch({
-            headless: true,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-gpu',
-                '--no-zygote',
-                '--window-size=1280,800'
-            ],
-            timeout: 60000 // Longer timeout for Render
-        });
+        const sharedBrowser = await getBrowser();
         let amazonResults = [];
         let ebayResults = [];
         let jijiResults = [];
@@ -552,7 +568,7 @@ app.get('/api/search', async (req, res) => {
         const runScraper = async (name, scrapeFn) => {
             let page;
             try {
-                page = await browser.newPage();
+                page = await sharedBrowser.newPage();
                 const res = await scrapeFn(page, q);
                 await page.close();
                 return res;
@@ -612,31 +628,11 @@ app.get('/api/search', async (req, res) => {
         };
 
         console.log(chalk.green(`Search completed. Found ${allResults.length} total results.`));
-        console.log(chalk.cyan(`  📊 Results breakdown:`));
-        console.log(chalk.yellow(`     • Slot.ng: ${slotResults.length}`));
-        console.log(chalk.yellow(`     • Konga: ${kongaResults.length}`));
-        console.log(chalk.yellow(`     • Jiji: ${jijiResults.length}`));
-        console.log(chalk.yellow(`     • Jumia: ${jumiaResults.length}`));
-        console.log(chalk.yellow(`     • Ajebo Market: ${ajeboResults.length}`));
-        console.log(chalk.yellow(`     • DexStitches: ${dexStitchesResults.length}`));
-        if (dexStitchesResults.length > 0) {
-            console.log(chalk.gray(`       (First DexStitches: ${dexStitchesResults[0].title})`));
-        }
-        console.log(chalk.yellow(`     • Amazon: ${amazonResults.length}`));
-        // console.log(chalk.yellow(`     • eBay: ${ebayResults.length}`));
         res.json(responseData);
 
     } catch (error) {
         console.error(chalk.red('API search failed:'), error.message);
         res.status(500).json({ error: 'Scraping failed' });
-    } finally {
-        if (browser) {
-            try {
-                await browser.close();
-            } catch (err) {
-                console.error('Error closing browser:', err.message);
-            }
-        }
     }
 });
 
