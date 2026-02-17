@@ -281,17 +281,17 @@ async function scrapeKonga(page, query) {
 
         const results = await page.evaluate(() => {
             const items = [];
-            const isRealImg = (url) => url && !url.startsWith('data:image') && (url.includes('cloudinary') || url.includes('konga.com') || url.length > 30);
+            const isRealImg = (url) => url && !url.startsWith('data:image') && (url.includes('cloudinary') || url.includes('konga.com') || url.length > 20);
 
             // Target the listing items
-            document.querySelectorAll('article[class*="ListingCard_listingCardContainer"], .List_listItem__KlvU2').forEach(el => {
-                const titleEl = el.querySelector('h3[class*="ListingCard_productTitle"], .ListingCard_productTitle__9Kzxv');
+            document.querySelectorAll('article[class*="ListingCard_listingCardContainer"], .List_listItem__KlvU2, div[data-testid="product-card"]').forEach(el => {
+                const titleEl = el.querySelector('h3[class*="ListingCard_productTitle"], .ListingCard_productTitle__9Kzxv, h3');
                 const title = titleEl?.innerText.trim() || 'N/A';
 
                 const linkEl = el.querySelector('a[href^="/product/"]');
                 const link = linkEl ? `https://www.konga.com${linkEl.getAttribute('href')}` : 'N/A';
 
-                const priceEl = el.querySelector('span[class*="price"], .shared_price__gnso_');
+                const priceEl = el.querySelector('span[class*="price"], .shared_price__gnso_, span[class*="ProductPrice"]');
                 const price = priceEl?.innerText.replace(/₦|,/g, '').trim() || 'N/A';
 
                 let img = 'N/A';
@@ -302,7 +302,12 @@ async function scrapeKonga(page, query) {
                     const src = imgTag.getAttribute('src');
                     const srcset = imgTag.getAttribute('srcset');
                     const dataSrc = imgTag.getAttribute('data-src');
+                    const dataOriginal = imgTag.getAttribute('data-original');
 
+                    if (isRealImg(dataOriginal)) {
+                        img = dataOriginal;
+                        break;
+                    }
                     if (isRealImg(dataSrc)) {
                         img = dataSrc;
                         break;
